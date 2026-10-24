@@ -1,7 +1,8 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 
-// Lazy load komponen game (hanya diunduh pas diklik!)
+// Lazy load komponen game
+const ShapePuzzleGame = lazy(() => import('./games/ShapePuzzleGame'));
 const SensoryBellsGame = lazy(() => import('./games/SensoryBellsGame'));
 const FingerPaintGame = lazy(() => import('./games/FingerPaintGame'));
 const ColorSortingGame = lazy(() => import('./games/ColorSortingGame'));
@@ -13,6 +14,84 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('montessori_tab') || 'toddler');
   const [activeGame, setActiveGame] = useState(() => localStorage.getItem('montessori_game') || null);
   const [stars, setStars] = useState(() => Number(localStorage.getItem('montessori_stars') || 0));
+  
+  // Status preferensi musik: jika user pernah sengaja mematikan ('false'), jangan putar lagi
+  const [isMusicOn, setIsMusicOn] = useState(() => localStorage.getItem('montessori_music_enabled') === 'true');
+
+  const audioCtxRef = useRef(null);
+  const isPlayingRef = useRef(false);
+  const timerRef = useRef(null);
+
+  const startBackgroundMusic = () => {
+    if (isPlayingRef.current) return;
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioContext();
+    }
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    const melody = [
+      261.63, 329.63, 392.00, 523.25,
+      392.00, 329.63, 261.63, 392.00,
+      329.63, 392.00, 440.00, 523.25,
+      440.00, 392.00, 329.63, 293.66
+    ];
+
+    let noteIndex = 0;
+    isPlayingRef.current = true;
+
+    const playNote = () => {
+      if (!isPlayingRef.current) return;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(melody[noteIndex], ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+
+      noteIndex = (noteIndex + 1) % melody.length;
+      timerRef.current = setTimeout(playNote, 320);
+    };
+
+    playNote();
+  };
+
+  const stopBackgroundMusic = () => {
+    isPlayingRef.current = false;
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+
+  const toggleMusic = () => {
+    const nextState = !isMusicOn;
+    setIsMusicOn(nextState);
+    localStorage.setItem('montessori_music_enabled', String(nextState));
+
+    if (nextState) {
+      startBackgroundMusic();
+    } else {
+      stopBackgroundMusic();
+    }
+  };
+
+  // Hanya mulai musik otomatis jika user memang mengaktifkan musik (isMusicOn === true)
+  const handleFirstInteraction = () => {
+    if (isMusicOn && !isPlayingRef.current) {
+      startBackgroundMusic();
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('montessori_tab', activeTab);
@@ -24,15 +103,37 @@ export default function App() {
   const addStar = () => setStars(prev => prev + 1);
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
+    <div 
+      onClick={handleFirstInteraction}
+      className="w-full max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 min-h-screen"
+    >
       <header className="flex items-center justify-between bg-white/95 backdrop-blur p-3 sm:p-5 rounded-2xl sm:rounded-3xl shadow-sm border border-stone-200 mb-4 sm:mb-6">
         <div>
           <h1 className="text-lg sm:text-2xl lg:text-3xl font-black text-stone-800">🌿 Montessori Playroom</h1>
           <p className="text-[11px] sm:text-sm text-stone-500">Eksplorasi sensorik & logika mandiri</p>
         </div>
-        <div className="flex items-center gap-1.5 sm:gap-2 bg-amber-50 border border-amber-200 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl">
-          <span>⭐</span>
-          <span className="text-xs sm:text-base font-black text-amber-900">{stars}</span>
+        
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMusic();
+            }}
+            title={isMusicOn ? 'Matikan Musik' : 'Nyalakan Musik'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border text-xs sm:text-sm font-bold transition ${
+              isMusicOn 
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
+                : 'bg-stone-100 border-stone-300 text-stone-500'
+            }`}
+          >
+            <span>{isMusicOn ? '🎵' : '🔇'}</span>
+            <span className="hidden sm:inline">{isMusicOn ? 'Musik ON' : 'Musik OFF'}</span>
+          </button>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-amber-50 border border-amber-200 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl">
+            <span>⭐</span>
+            <span className="text-xs sm:text-base font-black text-amber-900">{stars}</span>
+          </div>
         </div>
       </header>
 
@@ -68,6 +169,7 @@ export default function App() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
             {activeTab === 'toddler' && (
               <>
+                <GameCard title="Puzzle Bentuk Kayu" desc="Pasang balok bentuk ke lubangnya" icon="🪵" onPlay={() => setActiveGame('shape_puzzle')} />
                 <GameCard title="Bel Sensorik Lembut" desc="Sentuh bilah nada marimba kayu" icon="🔔" onPlay={() => setActiveGame('bells')} />
                 <GameCard title="Kanvas Lukis Jari" desc="Coretan warna ramah jari" icon="🎨" onPlay={() => setActiveGame('paint')} />
               </>
@@ -96,6 +198,7 @@ export default function App() {
           </button>
 
           <Suspense fallback={<div className="p-8 text-center text-stone-500 font-bold">Memuat Game... ⏳</div>}>
+            {activeGame === 'shape_puzzle' && <ShapePuzzleGame onWin={addStar} />}
             {activeGame === 'bells' && <SensoryBellsGame onWin={addStar} />}
             {activeGame === 'paint' && <FingerPaintGame onWin={addStar} />}
             {activeGame === 'color_sort' && <ColorSortingGame onWin={addStar} />}

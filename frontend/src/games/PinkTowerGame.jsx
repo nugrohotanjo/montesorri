@@ -1,45 +1,174 @@
 import React, { useState } from 'react';
 
-export default function PinkTowerGame({ onWin }) {
-  const [tower, setTower] = useState([]);
-  const blocks = [5, 4, 3, 2, 1];
+// Web Audio API Synthesizer
+const playSound = (type, pitchMultiplier = 1) => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
 
-  const addBlock = (size) => {
-    const expected = tower.length + 1;
-    if (size === (6 - expected)) {
-      const nextTower = [...tower, size];
+    if (type === 'pickup') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(280, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    } else if (type === 'snap') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(320 * pitchMultiplier, ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } else if (type === 'wrong') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    } else if (type === 'win') {
+      const notes = [392.0, 523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((freq, idx) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0.2, ctx.currentTime + idx * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + idx * 0.09 + 0.3);
+        o.start(ctx.currentTime + idx * 0.09);
+        o.stop(ctx.currentTime + idx * 0.09 + 0.3);
+      });
+    }
+  } catch (e) {
+    // Abaikan pembatasan audio browser
+  }
+};
+
+// Ketebalan sama persis (h-12), panjang bertingkat, nuansa Pink Montessori
+const INITIAL_BLOCKS = [
+  { val: 5, widthClass: 'w-64 sm:w-72', colorClass: 'bg-rose-500 border-rose-600', label: '5' },
+  { val: 4, widthClass: 'w-52 sm:w-60', colorClass: 'bg-rose-400 border-rose-500', label: '4' },
+  { val: 3, widthClass: 'w-40 sm:w-48', colorClass: 'bg-pink-400 border-pink-500', label: '3' },
+  { val: 2, widthClass: 'w-28 sm:w-36', colorClass: 'bg-pink-300 border-pink-400', label: '2' },
+  { val: 1, widthClass: 'w-16 sm:w-24', colorClass: 'bg-pink-200 border-pink-300 text-pink-900', label: '1' }
+];
+
+export default function PinkTowerGame({ onWin }) {
+  const [availableBlocks, setAvailableBlocks] = useState(() =>
+    [...INITIAL_BLOCKS].sort(() => Math.random() - 0.5)
+  );
+  const [tower, setTower] = useState([]);
+  const [draggingBlock, setDraggingBlock] = useState(null);
+  const [celebrate, setCelebrate] = useState(false);
+  const [wrongShake, setWrongShake] = useState(false);
+
+  const nextRequired = 5 - tower.length;
+
+  const handleDragStart = (block) => {
+    setDraggingBlock(block);
+    playSound('pickup');
+  };
+
+  const handlePlaceBlock = (block) => {
+    if (!block) return;
+
+    if (block.val === nextRequired) {
+      playSound('snap', 1 + (5 - block.val) * 0.15);
+      const nextTower = [...tower, block];
       setTower(nextTower);
-      if (nextTower.length === 5) onWin();
+      setAvailableBlocks((prev) => prev.filter((b) => b.val !== block.val));
+      setDraggingBlock(null);
+
+      if (nextTower.length === 5) {
+        setTimeout(() => {
+          playSound('win');
+          setCelebrate(true);
+          if (onWin) onWin();
+        }, 300);
+      }
     } else {
-      alert('Pilih balok yang lebih besar dulu ya!');
+      playSound('wrong');
+      setWrongShake(true);
+      setTimeout(() => setWrongShake(false), 400);
+      setDraggingBlock(null);
     }
   };
 
+  const handleReset = () => {
+    setTower([]);
+    setAvailableBlocks([...INITIAL_BLOCKS].sort(() => Math.random() - 0.5));
+    setCelebrate(false);
+    setDraggingBlock(null);
+  };
+
   return (
-    <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-stone-200 text-center">
-      <h2 className="text-base sm:text-xl font-bold mb-3">🧱 Susun Menara Pink</h2>
-      <div className="flex flex-col-reverse items-center justify-end h-52 sm:h-64 border-b-4 border-amber-700 mb-4 bg-stone-50 rounded-2xl p-2">
-        {tower.map((size) => (
-          <div
-            key={size}
-            style={{ width: `${size * 18 + 20}%`, maxWidth: `${size * 50}px`, height: '24px' }}
-            className="bg-pink-400 border border-pink-500 rounded-md transition-all shadow-sm"
-          />
-        ))}
+    <div className="bg-rose-50/70 border-2 border-rose-200/80 rounded-3xl p-4 sm:p-7 max-w-2xl mx-auto shadow-inner select-none">
+      <div className="text-center mb-5">
+        <h2 className="text-xl sm:text-2xl font-black text-rose-950">🧱 Menara Pink Montessori</h2>
+        <p className="text-xs sm:text-sm text-stone-600 mt-1">
+          Tarik balok dari yang <strong className="text-rose-700">paling panjang (5)</strong> sampai yang <strong className="text-rose-700">paling pendek (1)</strong>!
+        </p>
       </div>
-      <div className="flex justify-center items-center gap-2 sm:gap-3 flex-wrap">
-        {blocks.map((b) => (
-          <button
-            key={b}
-            disabled={tower.includes(b)}
-            onClick={() => addBlock(b)}
-            className={`w-10 h-10 sm:w-14 sm:h-14 bg-pink-300 border border-pink-400 rounded-xl font-bold text-pink-900 transition-all ${
-              tower.includes(b) ? 'opacity-20 cursor-not-allowed' : 'active:scale-95 shadow'
-            }`}
+
+      {/* Area Drop Menara */}
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => handlePlaceBlock(draggingBlock)}
+        className="min-h-[300px] flex flex-col-reverse items-center justify-start p-4 bg-white/80 rounded-2xl border-2 border-dashed border-rose-300 relative mb-6"
+      >
+        {/* Alas Kayu Bawah */}
+        <div className="w-72 sm:w-80 h-3.5 bg-amber-800/80 rounded-full shadow-sm mt-1" />
+
+        {/* Balok yang Terpasang */}
+        {tower.map((block) => (
+          <div
+            key={block.val}
+            className={`${block.widthClass} h-12 ${block.colorClass} border-2 ${block.val === 1 ? 'text-pink-950' : 'text-white'} font-black text-lg flex items-center justify-center rounded-xl shadow-sm`}
           >
-            {b}
-          </button>
+            {block.label}
+          </div>
         ))}
+
+        {tower.length === 0 && (
+          <span className="text-xs text-rose-400 font-bold mb-10">
+            Tarik balok angka 5 ke sini untuk alas pondasi!
+          </span>
+        )}
+      </div>
+
+      {/* Area Balok yang Tersedia */}
+      <div className="bg-white/90 border border-stone-200 rounded-2xl p-4 min-h-[110px] flex flex-col items-center justify-center">
+        {celebrate ? (
+          <div className="text-center py-2">
+            <p className="text-lg font-black text-emerald-600">🎉 Hore! Menara Pink berdiri kokoh dan rapi!</p>
+            <button
+              onClick={handleReset}
+              className="mt-3 px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-black text-sm rounded-xl shadow transition"
+            >
+              Susun Lagi ↺
+            </button>
+          </div>
+        ) : (
+          <div className={`w-full flex flex-wrap items-center justify-center gap-3 ${wrongShake ? 'animate-pulse' : ''}`}>
+            {availableBlocks.map((block) => (
+              <div
+                key={block.val}
+                draggable
+                onDragStart={() => handleDragStart(block)}
+                onClick={() => handlePlaceBlock(block)}
+                className={`${block.widthClass} h-12 ${block.colorClass} hover:brightness-105 active:scale-95 ${block.val === 1 ? 'text-pink-950' : 'text-white'} font-black text-base flex items-center justify-center rounded-xl shadow cursor-grab active:cursor-grabbing border-2 transition-transform`}
+                title={`Balok Angka ${block.label}`}
+              >
+                {block.label}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
