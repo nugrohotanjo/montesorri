@@ -4,6 +4,7 @@ import { BANK_GAMES } from './data/bankGames';
 import { CURRICULUM_DATA } from './config/curriculum';
 import { CUSTOM_GAMES } from './games/registry';
 import { preloadGameAudio } from './utils/audioPlayer';
+import ParentalGate from './components/common/ParentalGate';
 
 const UniversalDragDropEngine = lazy(() => import('./components/engines/UniversalDragDropEngine'));
 
@@ -21,7 +22,7 @@ const UI_TEXT = {
     tabKinder: '🌳 Kinder (5 - 7 th)',
     searchPlaceholder: 'Cari nama game atau materi...',
     playBtn: 'Mulai Main →',
-    backBtn: '← Kembali ke Menu',
+    backBtn: 'Kembali ke Menu',
     loading: 'Memuat Game... ⏳',
     notFound: 'Game tidak ditemukan.',
     tryAnother: 'Coba gunakan kata kunci lain.',
@@ -39,7 +40,7 @@ const UI_TEXT = {
     tabKinder: '🌳 Kinder (5 - 7 yrs)',
     searchPlaceholder: 'Search games or topics...',
     playBtn: 'Play Now →',
-    backBtn: '← Back to Menu',
+    backBtn: 'Back to Menu',
     loading: 'Loading Game... ⏳',
     notFound: 'Game not found.',
     tryAnother: 'Try searching with another keyword.',
@@ -73,6 +74,7 @@ export default function App() {
   const [activeGame, setActiveGame] = useState(() => localStorage.getItem('montessori_game') || null);
   const [stars, setStars] = useState(() => Number(localStorage.getItem('montessori_stars') || 0));
   const [searchQuery, setSearchQuery] = useState('');
+  const [isParentGateOpen, setIsParentGateOpen] = useState(false);
   
   const [isMusicOn, setIsMusicOn] = useState(() => localStorage.getItem('montessori_music_enabled') === 'true');
 
@@ -152,12 +154,43 @@ export default function App() {
     }
   };
 
-const handleFirstInteraction = () => {
-  preloadGameAudio(); // Memuat semua audio di background saat user pertama kali klik
-  if (isMusicOn && !isPlayingRef.current) {
-    startBackgroundMusic();
-  }
-};
+  const handleFirstInteraction = () => {
+    preloadGameAudio();
+    if (isMusicOn && !isPlayingRef.current) {
+      startBackgroundMusic();
+    }
+  };
+
+  // Fullscreen Management
+  const enterFullscreen = () => {
+    const elem = document.documentElement;
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen().catch(() => {});
+    } else if (elem.webkitRequestFullscreen) {
+      elem.webkitRequestFullscreen();
+    }
+  };
+
+  const exitFullscreen = () => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const handleStartGame = (gameId) => {
+    enterFullscreen();
+    setActiveGame(gameId);
+  };
+
+  const handleRequestBack = () => {
+    setIsParentGateOpen(true);
+  };
+
+  const handleUnlockSuccess = () => {
+    setIsParentGateOpen(false);
+    exitFullscreen();
+    setActiveGame(null);
+  };
 
   useEffect(() => {
     localStorage.setItem('montessori_tab', activeTab);
@@ -171,28 +204,25 @@ const handleFirstInteraction = () => {
   const currentBankGame = BANK_GAMES.find((g) => g.id === activeGame);
   const CustomGameComponent = CUSTOM_GAMES[activeGame];
 
-  // Helper untuk membaca teks string biasa atau object { id, en }
   const getText = (textObj) => {
     if (!textObj) return '';
     if (typeof textObj === 'string') return textObj;
     return textObj[lang] || textObj.id || '';
   };
 
-  // Cari kurikulum asal game yang sedang dimainkan
   const activeCurriculumKey = useMemo(() => {
     if (!activeGame) return null;
     if (currentBankGame?.category && CURRICULUM_INFO[currentBankGame.category]) {
       return currentBankGame.category;
     }
     for (const [catKey, list] of Object.entries(CURRICULUM_DATA)) {
-      if (list.some((g) => g.id === activeGame)) return catKey;
+      if (list.includes(activeGame)) return catKey;
     }
     return null;
   }, [activeGame, currentBankGame]);
 
   const activeCurriculum = activeCurriculumKey ? CURRICULUM_INFO[activeCurriculumKey] : null;
 
-  // Filter game di Bank Games
   const filteredBankGames = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return BANK_GAMES;
@@ -203,7 +233,6 @@ const handleFirstInteraction = () => {
     });
   }, [searchQuery, lang]);
 
-// Jika mode kurikulum, ambil detail game lengkap dari BANK_GAMES berdasarkan ID
   const displayedGames = useMemo(() => {
     if (viewMode === 'curriculum') {
       const gameIds = CURRICULUM_DATA[activeTab] || [];
@@ -226,7 +255,6 @@ const handleFirstInteraction = () => {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Tombol Pengalih Bahasa */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -239,7 +267,6 @@ const handleFirstInteraction = () => {
             <span>{lang.toUpperCase()}</span>
           </button>
 
-          {/* Tombol Musik */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -256,7 +283,6 @@ const handleFirstInteraction = () => {
             <span className="hidden sm:inline">{isMusicOn ? t.musicOn : t.musicOff}</span>
           </button>
 
-          {/* Bintang Skor */}
           <div className="flex items-center gap-1.5 sm:gap-2 bg-amber-50 border border-amber-200 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl">
             <span>⭐</span>
             <span className="text-xs sm:text-base font-black text-amber-900">{stars}</span>
@@ -266,7 +292,6 @@ const handleFirstInteraction = () => {
 
       {!activeGame ? (
         <>
-          {/* Navigasi Tab Utama */}
           <div className="flex justify-center mb-4">
             <div className="bg-stone-200 p-1 rounded-2xl flex gap-1 shadow-inner">
               <button
@@ -289,7 +314,6 @@ const handleFirstInteraction = () => {
           </div>
 
           {viewMode === 'curriculum' ? (
-            /* Tab Jenjang Usia Kurikulum */
             <div className="flex gap-2 p-1.5 bg-stone-200/80 rounded-2xl mb-4 sm:mb-8 overflow-x-auto">
               <button
                 onClick={() => setActiveTab('toddler')}
@@ -317,7 +341,6 @@ const handleFirstInteraction = () => {
               </button>
             </div>
           ) : (
-            /* Bilah Pencarian Bank Game */
             <div className="mb-6 max-w-md mx-auto relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 text-base">🔍</span>
               <input
@@ -338,7 +361,6 @@ const handleFirstInteraction = () => {
             </div>
           )}
 
-          {/* Grid Render Kartu Game */}
           {displayedGames.length === 0 ? (
             <div className="text-center py-12 bg-white/60 rounded-3xl border border-dashed border-stone-300 max-w-md mx-auto">
               <span className="text-4xl">🔍</span>
@@ -354,7 +376,7 @@ const handleFirstInteraction = () => {
                   desc={getText(game.desc)}
                   icon={game.icon}
                   playLabel={t.playBtn}
-                  onPlay={() => setActiveGame(game.id)}
+                  onPlay={() => handleStartGame(game.id)}
                 />
               ))}
             </div>
@@ -362,16 +384,14 @@ const handleFirstInteraction = () => {
         </>
       ) : (
         <div>
-          {/* Header Kontrol di Dalam Game */}
           <div className="flex items-center justify-between gap-2 mb-3 sm:mb-5">
             <button
-              onClick={() => setActiveGame(null)}
+              onClick={handleRequestBack}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-stone-200/90 hover:bg-stone-300 text-stone-700 font-bold rounded-xl text-xs sm:text-sm shadow-sm transition active:scale-95"
             >
-              {t.backBtn}
+              🔒 {t.backBtn}
             </button>
 
-            {/* Label Kurikulum Sesuai Pilihan Bahasa */}
             {activeCurriculum && (
               <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-black shadow-sm ${activeCurriculum.badgeClass}`}>
                 <span className={`w-2 h-2 rounded-full ${activeCurriculum.dotColor}`} />
@@ -391,6 +411,14 @@ const handleFirstInteraction = () => {
           </Suspense>
         </div>
       )}
+
+      {/* Parental Gate Modal */}
+      <ParentalGate
+        isOpen={isParentGateOpen}
+        lang={lang}
+        onClose={() => setIsParentGateOpen(false)}
+        onSuccess={handleUnlockSuccess}
+      />
     </div>
   );
 }

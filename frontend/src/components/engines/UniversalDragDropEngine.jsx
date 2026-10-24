@@ -1,11 +1,12 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
-import { speakVoice } from '../../utils/soundEffects';
 import { playKidVoice } from '../../utils/audioPlayer';
 
-// Web Audio API Synthesizer
+// Web Audio API Synthesizer (SFX Nada Mekanis)
 const playSound = (type, pitch = 1) => {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -59,7 +60,6 @@ const playSound = (type, pitch = 1) => {
   }
 };
 
-// Kamus Teks Bawaan Engine (Bisa di-override jika config menyediakan teks sendiri)
 const ENGINE_UI_TEXT = {
   id: {
     shuffleBtn: 'Acak Posisi',
@@ -76,7 +76,6 @@ const ENGINE_UI_TEXT = {
 };
 
 export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) {
-  // Helper fleksibel membaca string biasa atau object { id, en }
   const t = (val) => {
     if (!val) return '';
     if (typeof val === 'string') return val;
@@ -99,17 +98,14 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
   const [shakeId, setShakeId] = useState(null);
   const [isSpinning, setIsSpinning] = useState(false);
 
-  // Referensi DOM & Posisi Lama untuk FLIP Animation
   const targetsDomRef = useRef({});
   const itemsDomRef = useRef({});
   const prevPositionsRef = useRef({});
 
-  // Eksekusi animasi FLIP setelah urutan state diperbarui
   useLayoutEffect(() => {
     const prevPositions = prevPositionsRef.current;
     if (Object.keys(prevPositions).length === 0) return;
 
-    // Animasi pergeseran posisi Target
     targets.forEach((target) => {
       const el = targetsDomRef.current[target.id];
       const prevRect = prevPositions[`target-${target.id}`];
@@ -130,7 +126,6 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
       }
     });
 
-    // Animasi pergeseran posisi Balok/Item
     items.forEach((item) => {
       const el = itemsDomRef.current[item.id];
       const prevRect = prevPositions[`item-${item.id}`];
@@ -187,29 +182,27 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
       if (nextPlaced.length === config.items.length) {
         setTimeout(() => {
           playSound('win');
-          playKidVoice('win', lang); // Suara saat menyelesaikan game
+          playKidVoice('win', lang);
           setCelebrate(true);
           if (onWin) onWin();
         }, 300);
       } else {
-        playKidVoice('correct', lang); // Suara saat pasang objek benar (acak 1-3)
+        playKidVoice('correct', lang);
       }
     } else {
       playSound('wrong');
-      playKidVoice('wrong', lang); // Suara saat objek salah (acak 1-3)
+      playKidVoice('wrong', lang);
       setShakeId(targetId);
       setTimeout(() => setShakeId(null), 400);
       setDraggingItem(null);
     }
   };
 
-  // Drag Desktop Handlers
   const handleDragStart = (item) => {
     setDraggingItem(item);
     playSound('pickup');
   };
 
-  // Touch Mobile Handlers
   const handleTouchStart = (e, item) => {
     const touch = e.touches[0];
     setDraggingItem(item);
@@ -306,14 +299,18 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
               }`}
             >
               {isOccupied && matchedItem ? (
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center px-1 text-center">
                   <span className="text-3xl sm:text-4xl">{matchedItem.icon}</span>
-                  <span className="text-xs font-bold text-stone-700 mt-1">{t(matchedItem.label)}</span>
+                  <span className="text-[11px] sm:text-xs font-bold text-stone-700 leading-tight mt-1 line-clamp-2">
+                    {t(matchedItem.label)}
+                  </span>
                 </div>
               ) : (
-                <div className="flex flex-col items-center opacity-40">
+                <div className="flex flex-col items-center opacity-40 px-1 text-center">
                   <span className="text-3xl">{target.placeholderIcon || '🎯'}</span>
-                  <span className="text-[11px] font-bold text-stone-500 mt-1">{t(target.label)}</span>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-stone-500 leading-tight mt-1 line-clamp-2">
+                    {t(target.label)}
+                  </span>
                 </div>
               )}
             </div>
@@ -322,7 +319,7 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
       </div>
 
       {/* Wadah Objek yang Bisa Diseret */}
-      <div className="bg-white/90 border border-stone-200 rounded-2xl p-4 sm:p-6 min-h-[120px] flex items-center justify-center gap-3 sm:gap-4 flex-wrap">
+      <div className="bg-white/90 border border-stone-200 rounded-2xl p-4 sm:p-6 min-h-[130px] flex items-center justify-center gap-2.5 sm:gap-4 flex-wrap">
         {celebrate ? (
           <div className="text-center py-2">
             <p className="text-lg font-black text-emerald-600">{ui.winMessage}</p>
@@ -334,7 +331,7 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
             </button>
           </div>
         ) : (
-          <div className="w-full flex items-center justify-center gap-3 sm:gap-4 flex-wrap">
+          <div className="w-full flex items-center justify-center gap-2.5 sm:gap-4 flex-wrap">
             {items.map((item) => (
               <div
                 key={item.id}
@@ -343,10 +340,12 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
                 onDragStart={() => handleDragStart(item)}
                 onTouchStart={(e) => handleTouchStart(e, item)}
                 onClick={() => handlePlace(item, item.targetId)}
-                className="w-16 h-16 sm:w-20 sm:h-20 bg-white border-2 border-amber-300 hover:border-amber-400 rounded-2xl flex flex-col items-center justify-center shadow cursor-grab active:cursor-grabbing active:scale-95 will-change-transform"
+                className="w-20 sm:w-24 min-h-[82px] sm:min-h-[96px] p-2 bg-white border-2 border-amber-300 hover:border-amber-400 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow cursor-grab active:cursor-grabbing active:scale-95 will-change-transform"
               >
-                <span className="text-2xl sm:text-3xl">{item.icon}</span>
-                <span className="text-[10px] sm:text-[11px] font-bold text-stone-600 mt-0.5">{t(item.label)}</span>
+                <span className="text-3xl sm:text-4xl drop-shadow-sm select-none">{item.icon}</span>
+                <span className="text-[10px] sm:text-xs font-bold text-stone-700 leading-tight mt-1.5 line-clamp-2 max-w-full break-words select-none">
+                  {t(item.label)}
+                </span>
               </div>
             ))}
           </div>
@@ -364,10 +363,12 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
             pointerEvents: 'none',
             zIndex: 9999
           }}
-          className="w-20 h-20 bg-white/95 border-2 border-amber-400 rounded-2xl flex flex-col items-center justify-center shadow-2xl opacity-90"
+          className="w-24 min-h-[90px] p-2 bg-white/95 border-2 border-amber-400 rounded-2xl flex flex-col items-center justify-center text-center shadow-2xl opacity-90"
         >
-          <span className="text-3xl">{draggingItem.icon}</span>
-          <span className="text-[11px] font-bold text-stone-700">{t(draggingItem.label)}</span>
+          <span className="text-3xl drop-shadow-sm">{draggingItem.icon}</span>
+          <span className="text-[11px] font-bold text-stone-700 leading-tight mt-1">
+            {t(draggingItem.label)}
+          </span>
         </div>
       )}
     </div>
