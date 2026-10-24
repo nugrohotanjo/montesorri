@@ -11,6 +11,8 @@ import GameCard from './components/common/GameCard';
 import ParentalGate from './components/common/ParentalGate';
 import ChildProfileModal from './components/profile/ChildProfileModal';
 import ParentAnalyticsModal from './components/profile/ParentAnalyticsModal';
+import LegalModal from './components/common/LegalModal';
+import { secureStorage } from './utils/cryptoStorage';
 
 const UniversalDragDropEngine = lazy(() => import('./components/engines/UniversalDragDropEngine'));
 
@@ -27,6 +29,16 @@ export default function App() {
   const [activeGame, setActiveGame] = useState(() => localStorage.getItem('montessori_game') || null);
   const [stars, setStars] = useState(() => Number(localStorage.getItem('montessori_stars') || 0));
   const [searchQuery, setSearchQuery] = useState('');
+  // Cek apakah user sudah pernah menyetujui disclaimer sebelumnya
+  const [isLegalOpen, setIsLegalOpen] = useState(() => {
+    return localStorage.getItem('montessori_legal_accepted') !== 'true';
+  });
+
+  // Handler saat menutup modal legal
+  const handleCloseLegal = () => {
+    localStorage.setItem('montessori_legal_accepted', 'true');
+    setIsLegalOpen(false);
+  };
 
   // Mode Orang Tua & Modal Laporan
   const [isParentMode, setIsParentMode] = useState(() => localStorage.getItem('montessori_parent_mode') === 'true');
@@ -37,7 +49,7 @@ export default function App() {
 
   const [childProfile, setChildProfile] = useState(() => {
     try {
-      const saved = localStorage.getItem('montessori_child_profile');
+      const saved = secureStorage.getItem('montessori_child_profile');
       return saved ? JSON.parse(saved) : { name: 'Kano', age: 3, avatar: '🦁' };
     } catch {
       return { name: 'Kano', age: 3, avatar: '🦁' };
@@ -172,7 +184,7 @@ export default function App() {
 
   const handleSaveProfile = (newProfile) => {
     setChildProfile(newProfile);
-    localStorage.setItem('montessori_child_profile', JSON.stringify(newProfile));
+    secureStorage.setItem('montessori_child_profile', JSON.stringify(newProfile));
     setIsProfileModalOpen(false);
     if (!isParentMode) {
       setActiveTab(getAgeMilestoneKey(newProfile.age));
@@ -500,6 +512,33 @@ export default function App() {
         lang={lang}
         onClose={() => setIsAnalyticsOpen(false)}
       />
+
+        {/* Footer Minimalis */}
+      {!activeGame && (
+        <footer className="mt-8 pt-4 pb-6 border-t border-stone-200/60 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-stone-400 select-none">
+          <div>
+            © {new Date().getFullYear()} Montessori Playroom. {lang === 'en' ? 'Screen-time conscious play.' : 'Media bermain sadar screen time.'}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsLegalOpen(true)}
+              className="hover:text-stone-700 underline underline-offset-2 transition font-medium"
+            >
+              {lang === 'en' ? 'Terms & Disclaimer' : 'Ketentuan & Penafian'}
+            </button>
+            <span>•</span>
+            <span>{lang === 'en' ? 'Local Storage Only' : '100% Data Lokal'}</span>
+          </div>
+        </footer>
+      )}
+
+      <LegalModal
+        isOpen={isLegalOpen}
+        lang={lang}
+        isFirstVisit={localStorage.getItem('montessori_legal_accepted') !== 'true'}
+        onClose={handleCloseLegal}
+      />
+
     </div>
   );
 }

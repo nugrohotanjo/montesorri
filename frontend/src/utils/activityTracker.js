@@ -1,20 +1,16 @@
+import { secureStorage } from './cryptoStorage';
+
 const STORAGE_KEY = 'montessori_analytics_data';
 
-// Ambil seluruh data analitik dari localStorage
 export const getAnalyticsData = () => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const decrypted = secureStorage.getItem(STORAGE_KEY);
+    return decrypted ? JSON.parse(decrypted) : {};
   } catch {
     return {};
   }
 };
 
-/**
- * Catat penyelesaian game:
- * @param {string} gameId - ID game (misal: 'shape_puzzle')
- * @param {number} sessionDurationSec - Durasi sesi ini dalam detik
- */
 export const recordGameCompletion = (gameId, sessionDurationSec) => {
   if (!gameId) return;
 
@@ -31,7 +27,6 @@ export const recordGameCompletion = (gameId, sessionDurationSec) => {
   const newPlayCount = currentRecord.playCount + 1;
   const newTotalDuration = currentRecord.totalDurationSeconds + roundedDuration;
 
-  // Cek rekor tercepat baru
   const newBestTime =
     currentRecord.bestTimeSeconds === null
       ? roundedDuration
@@ -39,7 +34,6 @@ export const recordGameCompletion = (gameId, sessionDurationSec) => {
 
   const nowIso = new Date().toISOString();
 
-  // Simpan maksimal 15 riwayat sesi terakhir agar storage tetap hemat
   const updatedHistory = [
     {
       playedAt: nowIso,
@@ -56,5 +50,6 @@ export const recordGameCompletion = (gameId, sessionDurationSec) => {
     sessionHistory: updatedHistory
   };
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  // Tersimpan dalam bentuk string acak terenkripsi
+  secureStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
