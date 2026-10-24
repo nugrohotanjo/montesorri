@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BANK_GAMES } from './data/bankGames';
 import { CURRICULUM_DATA } from './config/curriculum';
 import { CUSTOM_GAMES } from './games/registry';
+import { preloadGameAudio } from './utils/audioPlayer';
 
 const UniversalDragDropEngine = lazy(() => import('./components/engines/UniversalDragDropEngine'));
 
@@ -151,11 +152,12 @@ export default function App() {
     }
   };
 
-  const handleFirstInteraction = () => {
-    if (isMusicOn && !isPlayingRef.current) {
-      startBackgroundMusic();
-    }
-  };
+const handleFirstInteraction = () => {
+  preloadGameAudio(); // Memuat semua audio di background saat user pertama kali klik
+  if (isMusicOn && !isPlayingRef.current) {
+    startBackgroundMusic();
+  }
+};
 
   useEffect(() => {
     localStorage.setItem('montessori_tab', activeTab);

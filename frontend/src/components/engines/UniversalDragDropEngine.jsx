@@ -1,4 +1,6 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
+import { speakVoice } from '../../utils/soundEffects';
+import { playKidVoice } from '../../utils/audioPlayer';
 
 // Web Audio API Synthesizer
 const playSound = (type, pitch = 1) => {
@@ -185,12 +187,16 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
       if (nextPlaced.length === config.items.length) {
         setTimeout(() => {
           playSound('win');
+          playKidVoice('win', lang); // Suara saat menyelesaikan game
           setCelebrate(true);
           if (onWin) onWin();
         }, 300);
+      } else {
+        playKidVoice('correct', lang); // Suara saat pasang objek benar (acak 1-3)
       }
     } else {
       playSound('wrong');
+      playKidVoice('wrong', lang); // Suara saat objek salah (acak 1-3)
       setShakeId(targetId);
       setTimeout(() => setShakeId(null), 400);
       setDraggingItem(null);
