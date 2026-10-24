@@ -91,6 +91,7 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
     [...config.items].sort(() => Math.random() - 0.5)
   );
   const [placedItemIds, setPlacedItemIds] = useState([]);
+  const [selectedItem, setSelectedItem] = useState(null); // Mode Tap-to-Select
   const [draggingItem, setDraggingItem] = useState(null);
   const [touchPos, setTouchPos] = useState({ x: 0, y: 0 });
   const [isTouchDragging, setIsTouchDragging] = useState(false);
@@ -101,6 +102,7 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
   const targetsDomRef = useRef({});
   const itemsDomRef = useRef({});
   const prevPositionsRef = useRef({});
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
 
   useLayoutEffect(() => {
     const prevPositions = prevPositionsRef.current;
@@ -167,6 +169,7 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
 
     setTargets((prev) => [...prev].sort(() => Math.random() - 0.5));
     setItems((prev) => [...prev].sort(() => Math.random() - 0.5));
+    setSelectedItem(null);
   };
 
   const handlePlace = (item, targetId) => {
@@ -177,6 +180,7 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
       const nextPlaced = [...placedItemIds, item.id];
       setPlacedItemIds(nextPlaced);
       setItems((prev) => prev.filter((i) => i.id !== item.id));
+      setSelectedItem(null);
       setDraggingItem(null);
 
       if (nextPlaced.length === config.items.length) {
@@ -198,41 +202,71 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
     }
   };
 
+  // Pilih item via klik/tap (Tap-to-Select)
+  const handleItemClick = (item) => {
+    if (selectedItem?.id === item.id) {
+      setSelectedItem(null); // Batalkan pilihan jika diketuk ulang
+    } else {
+      setSelectedItem(item);
+      playSound('pickup');
+    }
+  };
+
+  // Ketuk habitat sasaran saat ada item yang dipilih
+  const handleTargetClick = (targetId) => {
+    if (selectedItem) {
+      handlePlace(selectedItem, targetId);
+    }
+  };
+
   const handleDragStart = (item) => {
     setDraggingItem(item);
+    setSelectedItem(item);
     playSound('pickup');
   };
 
   const handleTouchStart = (e, item) => {
     const touch = e.touches[0];
-    setDraggingItem(item);
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
     setTouchPos({ x: touch.clientX, y: touch.clientY });
-    setIsTouchDragging(true);
+    setDraggingItem(item);
     playSound('pickup');
   };
 
   const handleTouchMove = (e) => {
-    if (!isTouchDragging) return;
+    if (!draggingItem) return;
     const touch = e.touches[0];
-    setTouchPos({ x: touch.clientX, y: touch.clientY });
+    const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+    const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+
+    // Aktifkan mode seret visual jika jari bergerak lebih dari 8px
+    if (dx > 8 || dy > 8) {
+      setIsTouchDragging(true);
+      setTouchPos({ x: touch.clientX, y: touch.clientY });
+    }
   };
 
   const handleTouchEnd = (e) => {
-    if (!isTouchDragging || !draggingItem) return;
+    if (!draggingItem) return;
 
-    const touch = e.changedTouches[0];
-    const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (isTouchDragging) {
+      const touch = e.changedTouches[0];
+      const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
 
-    const matchedTarget = targets.find((target) => {
-      const el = targetsDomRef.current[target.id];
-      return el && (el === elemBelow || el.contains(elemBelow));
-    });
+      const matchedTarget = targets.find((target) => {
+        const el = targetsDomRef.current[target.id];
+        return el && (el === elemBelow || el.contains(elemBelow));
+      });
 
-    if (matchedTarget) {
-      handlePlace(draggingItem, matchedTarget.id);
+      if (matchedTarget) {
+        handlePlace(draggingItem, matchedTarget.id);
+      }
+      setIsTouchDragging(false);
+    } else {
+      // Jika jari tidak bergerak, anggap sebagai tap (pilih item)
+      handleItemClick(draggingItem);
     }
 
-    setIsTouchDragging(false);
     setDraggingItem(null);
   };
 
@@ -240,6 +274,7 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
     setTargets([...config.targets].sort(() => Math.random() - 0.5));
     setItems([...config.items].sort(() => Math.random() - 0.5));
     setPlacedItemIds([]);
+    setSelectedItem(null);
     setCelebrate(false);
     setDraggingItem(null);
     setIsTouchDragging(false);
@@ -288,13 +323,16 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
             <div
               key={target.id}
               ref={(el) => (targetsDomRef.current[target.id] = el)}
+              onClick={() => handleTargetClick(target.id)}
               onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handlePlace(draggingItem, target.id)}
-              className={`h-28 sm:h-32 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed will-change-transform p-2 ${
+              onDrop={() => handlePlace(draggingItem || selectedItem, target.id)}
+              className={`h-28 sm:h-32 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed will-change-transform p-2 cursor-pointer transition-all ${
                 isOccupied
-                  ? 'border-transparent bg-white shadow-sm'
+                  ? 'border-transparent bg-white shadow-sm pointer-events-none'
                   : shakeId === target.id
                   ? 'border-rose-400 bg-rose-50 animate-pulse'
+                  : selectedItem
+                  ? 'border-amber-400 bg-amber-100/50 hover:bg-amber-100 active:scale-95'
                   : 'border-stone-300 bg-white/50'
               }`}
             >
@@ -318,7 +356,7 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
         })}
       </div>
 
-      {/* Wadah Objek yang Bisa Diseret */}
+      {/* Wadah Objek yang Bisa Diseret / Dipilih */}
       <div className="bg-white/90 border border-stone-200 rounded-2xl p-4 sm:p-6 min-h-[130px] flex items-center justify-center gap-2.5 sm:gap-4 flex-wrap">
         {celebrate ? (
           <div className="text-center py-2">
@@ -332,27 +370,34 @@ export default function UniversalDragDropEngine({ config, onWin, lang = 'id' }) 
           </div>
         ) : (
           <div className="w-full flex items-center justify-center gap-2.5 sm:gap-4 flex-wrap">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                ref={(el) => (itemsDomRef.current[item.id] = el)}
-                draggable
-                onDragStart={() => handleDragStart(item)}
-                onTouchStart={(e) => handleTouchStart(e, item)}
-                onClick={() => handlePlace(item, item.targetId)}
-                className="w-20 sm:w-24 min-h-[82px] sm:min-h-[96px] p-2 bg-white border-2 border-amber-300 hover:border-amber-400 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow cursor-grab active:cursor-grabbing active:scale-95 will-change-transform"
-              >
-                <span className="text-3xl sm:text-4xl drop-shadow-sm select-none">{item.icon}</span>
-                <span className="text-[10px] sm:text-xs font-bold text-stone-700 leading-tight mt-1.5 line-clamp-2 max-w-full break-words select-none">
-                  {t(item.label)}
-                </span>
-              </div>
-            ))}
+            {items.map((item) => {
+              const isSelected = selectedItem?.id === item.id;
+              return (
+                <div
+                  key={item.id}
+                  ref={(el) => (itemsDomRef.current[item.id] = el)}
+                  draggable
+                  onDragStart={() => handleDragStart(item)}
+                  onTouchStart={(e) => handleTouchStart(e, item)}
+                  onClick={() => handleItemClick(item)}
+                  className={`w-20 sm:w-24 min-h-[82px] sm:min-h-[96px] p-2 bg-white rounded-2xl flex flex-col items-center justify-center text-center shadow-sm cursor-grab active:cursor-grabbing will-change-transform transition-all ${
+                    isSelected
+                      ? 'border-4 border-amber-500 ring-4 ring-amber-200 scale-105 shadow-md'
+                      : 'border-2 border-amber-300 hover:border-amber-400 active:scale-95'
+                  }`}
+                >
+                  <span className="text-3xl sm:text-4xl drop-shadow-sm select-none">{item.icon}</span>
+                  <span className="text-[10px] sm:text-xs font-bold text-stone-700 leading-tight mt-1.5 line-clamp-2 max-w-full break-words select-none">
+                    {t(item.label)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Bayangan Objek yang Mengikuti Jari Saat Diseret di HP */}
+      {/* Bayangan Objek yang Mengikuti Jari Saat Diseret di Layar HP */}
       {isTouchDragging && draggingItem && (
         <div
           style={{
