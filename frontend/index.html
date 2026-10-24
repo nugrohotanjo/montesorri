@@ -16,6 +16,15 @@
       .safe-top { padding-top: env(safe-area-inset-top, 1rem); }
       .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 1.5rem); }
     </style>
+
+    <!-- Kunci mode fullscreen standalone di iOS/iPhone -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Montessori" />
+
+    <!-- Cegah zoom yang tidak disengaja oleh anak -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
   </head>
   <body class="min-h-screen text-stone-800 safe-top safe-bottom">
     <div id="root"></div>

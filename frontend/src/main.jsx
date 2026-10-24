@@ -168,6 +168,9 @@ export default function App() {
       elem.requestFullscreen().catch(() => {});
     } else if (elem.webkitRequestFullscreen) {
       elem.webkitRequestFullscreen();
+    } else {
+      // Trik untuk iPhone Safari: scroll 1px ke bawah untuk menyembunyikan address bar
+      window.scrollTo(0, 1);
     }
   };
 
