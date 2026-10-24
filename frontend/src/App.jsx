@@ -361,51 +361,48 @@ export default function App() {
           </div>
 
           {viewMode === 'curriculum' ? (
-            <div className="flex gap-2 p-1.5 bg-stone-200/80 rounded-2xl mb-4 sm:mb-8 overflow-x-auto">
-              <button
-                disabled={isTabLocked('toddler')}
-                onClick={() => setActiveTab('toddler')}
-                className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-1.5 transition ${
-                  activeTab === 'toddler'
-                    ? 'bg-white shadow text-stone-800'
-                    : isTabLocked('toddler')
-                    ? 'text-stone-400 opacity-60 cursor-not-allowed bg-stone-100/50'
-                    : 'text-stone-600 hover:text-stone-800'
-                }`}
-              >
-                {isTabLocked('toddler') && <span>🔒</span>}
-                <span>{t.tabToddler}</span>
-              </button>
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 bg-stone-200/70 rounded-2xl mb-4 sm:mb-8 select-none">
+              {['toddler', 'preschool', 'kinder'].map((key) => {
+                const milestone = t.milestones?.[key] || { name: key, age: '', icon: '🌱' };
+                const locked = isTabLocked(key);
+                const isActive = activeTab === key;
 
-              <button
-                disabled={isTabLocked('preschool')}
-                onClick={() => setActiveTab('preschool')}
-                className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-1.5 transition ${
-                  activeTab === 'preschool'
-                    ? 'bg-white shadow text-stone-800'
-                    : isTabLocked('preschool')
-                    ? 'text-stone-400 opacity-60 cursor-not-allowed bg-stone-100/50'
-                    : 'text-stone-600 hover:text-stone-800'
-                }`}
-              >
-                {isTabLocked('preschool') && <span>🔒</span>}
-                <span>{t.tabPreschool}</span>
-              </button>
+                return (
+                  <button
+                    key={key}
+                    disabled={locked}
+                    onClick={() => setActiveTab(key)}
+                    className={`py-2 px-1 sm:py-2.5 sm:px-3 rounded-xl flex flex-col items-center justify-center transition-all relative ${
+                      isActive
+                        ? 'bg-white shadow-sm text-stone-900 ring-2 ring-amber-400/50 scale-[1.01]'
+                        : locked
+                        ? 'text-stone-400 opacity-60 cursor-not-allowed bg-stone-100/40'
+                        : 'text-stone-600 hover:text-stone-900 hover:bg-white/50 active:scale-95'
+                    }`}
+                  >
+                    {/* Baris Atas: Ikon/Gembok + Nama Tahap */}
+                    <div className="flex items-center gap-1 leading-tight text-center">
+                      <span className="text-xs sm:text-base">
+                        {locked ? '🔒' : milestone.icon}
+                      </span>
+                      <span className="font-black text-xs sm:text-sm tracking-tight">
+                        {milestone.name}
+                      </span>
+                    </div>
 
-              <button
-                disabled={isTabLocked('kinder')}
-                onClick={() => setActiveTab('kinder')}
-                className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-1.5 transition ${
-                  activeTab === 'kinder'
-                    ? 'bg-white shadow text-stone-800'
-                    : isTabLocked('kinder')
-                    ? 'text-stone-400 opacity-60 cursor-not-allowed bg-stone-100/50'
-                    : 'text-stone-600 hover:text-stone-800'
-                }`}
-              >
-                {isTabLocked('kinder') && <span>🔒</span>}
-                <span>{t.tabKinder}</span>
-              </button>
+                    {/* Baris Bawah: Rentang Usia */}
+                    <span
+                      className={`text-[9px] sm:text-[11px] font-semibold mt-0.5 leading-none px-1.5 py-0.5 rounded-md ${
+                        isActive
+                          ? 'bg-amber-100/70 text-amber-900 font-bold'
+                          : 'text-stone-500'
+                      }`}
+                    >
+                      {milestone.age}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div className="mb-6 max-w-md mx-auto relative">

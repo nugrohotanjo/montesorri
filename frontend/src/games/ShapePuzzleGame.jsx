@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { playKidVoice, playShapeVoice } from '../utils/audioPlayer';
 
 const SHAPE_GAME_TEXT = {
@@ -55,6 +55,27 @@ export default function ShapePuzzleGame({ onWin, lang = 'id' }) {
   const [selectedShape, setSelectedShape] = useState(null);
   const [shakeId, setShakeId] = useState(null);
   const [celebrate, setCelebrate] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Kunci scrolling browser selama anak sedang menyeret/drag item di layar
+  useEffect(() => {
+    if (isDragging) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+
+      const preventTouch = (e) => {
+        if (e.cancelable) e.preventDefault();
+      };
+
+      window.addEventListener('touchmove', preventTouch, { passive: false });
+
+      return () => {
+        document.body.style.overflow = '';
+        document.body.style.touchAction = '';
+        window.removeEventListener('touchmove', preventTouch);
+      };
+    }
+  }, [isDragging]);
 
   const handlePlace = (item, targetId) => {
     if (!item) return;
@@ -64,6 +85,7 @@ export default function ShapePuzzleGame({ onWin, lang = 'id' }) {
       setPlacedShapes(nextPlaced);
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       setSelectedShape(null);
+      setIsDragging(false);
 
       if (nextPlaced.length === SHAPES_DATA.length) {
         setCelebrate(true);
@@ -74,13 +96,14 @@ export default function ShapePuzzleGame({ onWin, lang = 'id' }) {
       }
     } else {
       setShakeId(targetId);
+      setIsDragging(false);
       playKidVoice('wrong', lang);
       setTimeout(() => setShakeId(null), 400);
     }
   };
 
   const handleSelect = (item) => {
-    // Hanya bunyi saat di-tap/klik biasa
+    // Bunyikan nama bentuk hanya saat diklik atau di-tap biasa
     playShapeVoice(item.id, lang);
 
     if (selectedShape?.id === item.id) {
@@ -95,11 +118,12 @@ export default function ShapePuzzleGame({ onWin, lang = 'id' }) {
     setItems([...SHAPES_DATA].sort(() => Math.random() - 0.5));
     setPlacedShapes([]);
     setSelectedShape(null);
+    setIsDragging(false);
     setCelebrate(false);
   };
 
   return (
-    <div className="bg-amber-50/70 border-2 border-amber-200/80 rounded-3xl p-4 sm:p-7 max-w-3xl mx-auto shadow-inner select-none">
+    <div className="bg-amber-50/70 border-2 border-amber-200/80 rounded-3xl p-4 sm:p-7 max-w-3xl mx-auto shadow-inner select-none touch-none">
       <div className="text-center sm:text-left mb-6">
         <h2 className="text-xl sm:text-2xl font-black text-amber-950">{t.title}</h2>
         <p className="text-xs sm:text-sm text-stone-600 mt-0.5">{t.instruction}</p>
@@ -121,6 +145,7 @@ export default function ShapePuzzleGame({ onWin, lang = 'id' }) {
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
+                setIsDragging(false);
                 const droppedId = e.dataTransfer.getData('text/plain');
                 const droppedItem = items.find((i) => i.id === droppedId);
                 if (droppedItem) handlePlace(droppedItem, shape.id);
@@ -166,13 +191,28 @@ export default function ShapePuzzleGame({ onWin, lang = 'id' }) {
               <div
                 key={item.id}
                 draggable
+                style={{ touchAction: 'none' }}
                 onDragStart={(e) => {
-                  // Murni drag & drop: TIDAK memanggil playShapeVoice di sini
+                  setIsDragging(true);
                   setSelectedShape(item);
                   e.dataTransfer.setData('text/plain', item.id);
                 }}
+                onDragEnd={() => setIsDragging(false)}
+                onTouchStart={() => setIsDragging(true)}
+                onTouchEnd={(e) => {
+                  setIsDragging(false);
+                  const touch = e.changedTouches?.[0];
+                  if (touch) {
+                    const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const targetBox = dropTarget?.closest('[data-shape-id]');
+                    if (targetBox) {
+                      const targetId = targetBox.getAttribute('data-shape-id');
+                      handlePlace(item, targetId);
+                    }
+                  }
+                }}
                 onClick={() => handleSelect(item)}
-                className={`w-20 sm:w-24 min-h-[82px] sm:min-h-[92px] p-2 bg-white rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
+                className={`w-20 sm:w-24 min-h-[82px] sm:min-h-[92px] p-2 bg-white rounded-2xl flex flex-col items-center justify-center text-center cursor-grab active:cursor-grabbing transition-all ${
                   isSelected
                     ? 'border-4 border-amber-500 ring-4 ring-amber-200 scale-105 shadow-md'
                     : 'border-2 border-amber-300 hover:border-amber-400 shadow-sm active:scale-95'
