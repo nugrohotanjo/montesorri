@@ -1,26 +1,91 @@
-import React, { useState, useEffect, lazy, Suspense, useRef } from 'react';
+import React, { useState, useEffect, lazy, Suspense, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
+import { BANK_GAMES } from './data/bankGames';
+import { CURRICULUM_DATA } from './config/curriculum';
+import { CUSTOM_GAMES } from './games/registry';
 
-// Lazy load komponen game
-const ShapePuzzleGame = lazy(() => import('./games/ShapePuzzleGame'));
-const SensoryBellsGame = lazy(() => import('./games/SensoryBellsGame'));
-const FingerPaintGame = lazy(() => import('./games/FingerPaintGame'));
-const ColorSortingGame = lazy(() => import('./games/ColorSortingGame'));
-const PinkTowerGame = lazy(() => import('./games/PinkTowerGame'));
-const MissingApplesGame = lazy(() => import('./games/MissingApplesGame'));
-const BodyPartsGame = lazy(() => import('./games/BodyPartsGame'));
+const UniversalDragDropEngine = lazy(() => import('./components/engines/UniversalDragDropEngine'));
+
+// Kamus Teks Antarmuka (UI Translations)
+const UI_TEXT = {
+  id: {
+    appTitle: '🌿 Montessori Playroom',
+    appSubtitle: 'Eksplorasi sensorik & logika mandiri',
+    musicOn: 'Musik ON',
+    musicOff: 'Musik OFF',
+    tabCurriculum: '🌱 Jalur Tahap Usia',
+    tabBank: '🎮 Bank Semua Game',
+    tabToddler: '🌱 Toddler (1 - 2.5 th)',
+    tabPreschool: '🌿 Preschool (3 - 4.5 th)',
+    tabKinder: '🌳 Kinder (5 - 7 th)',
+    searchPlaceholder: 'Cari nama game atau materi...',
+    playBtn: 'Mulai Main →',
+    backBtn: '← Kembali ke Menu',
+    loading: 'Memuat Game... ⏳',
+    notFound: 'Game tidak ditemukan.',
+    tryAnother: 'Coba gunakan kata kunci lain.',
+    notAvailable: 'Game belum tersedia.'
+  },
+  en: {
+    appTitle: '🌿 Montessori Playroom',
+    appSubtitle: 'Sensory exploration & self-directed logic',
+    musicOn: 'Music ON',
+    musicOff: 'Music OFF',
+    tabCurriculum: '🌱 Age Milestones',
+    tabBank: '🎮 All Games Pool',
+    tabToddler: '🌱 Toddler (1 - 2.5 yrs)',
+    tabPreschool: '🌿 Preschool (3 - 4.5 yrs)',
+    tabKinder: '🌳 Kinder (5 - 7 yrs)',
+    searchPlaceholder: 'Search games or topics...',
+    playBtn: 'Play Now →',
+    backBtn: '← Back to Menu',
+    loading: 'Loading Game... ⏳',
+    notFound: 'Game not found.',
+    tryAnother: 'Try searching with another keyword.',
+    notAvailable: 'Game not yet available.'
+  }
+};
+
+// Konfigurasi Label & Warna Badge Kurikulum Bilingual
+const CURRICULUM_INFO = {
+  toddler: {
+    label: { id: 'Kurikulum Toddler (1 - 2.5 th)', en: 'Toddler Track (1 - 2.5 yrs)' },
+    badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    dotColor: 'bg-emerald-500'
+  },
+  preschool: {
+    label: { id: 'Kurikulum Preschool (3 - 4.5 th)', en: 'Preschool Track (3 - 4.5 yrs)' },
+    badgeClass: 'bg-sky-50 text-sky-800 border-sky-200',
+    dotColor: 'bg-sky-500'
+  },
+  kinder: {
+    label: { id: 'Kurikulum Kinder (5 - 7 th)', en: 'Kinder Track (5 - 7 yrs)' },
+    badgeClass: 'bg-purple-50 text-purple-800 border-purple-200',
+    dotColor: 'bg-purple-500'
+  }
+};
 
 export default function App() {
+  const [lang, setLang] = useState(() => localStorage.getItem('montessori_lang') || 'id');
+  const [viewMode, setViewMode] = useState('curriculum');
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('montessori_tab') || 'toddler');
   const [activeGame, setActiveGame] = useState(() => localStorage.getItem('montessori_game') || null);
   const [stars, setStars] = useState(() => Number(localStorage.getItem('montessori_stars') || 0));
+  const [searchQuery, setSearchQuery] = useState('');
   
-  // Status preferensi musik: jika user pernah sengaja mematikan ('false'), jangan putar lagi
   const [isMusicOn, setIsMusicOn] = useState(() => localStorage.getItem('montessori_music_enabled') === 'true');
 
   const audioCtxRef = useRef(null);
   const isPlayingRef = useRef(false);
   const timerRef = useRef(null);
+
+  const t = UI_TEXT[lang] || UI_TEXT.id;
+
+  const toggleLanguage = () => {
+    const nextLang = lang === 'id' ? 'en' : 'id';
+    setLang(nextLang);
+    localStorage.setItem('montessori_lang', nextLang);
+  };
 
   const startBackgroundMusic = () => {
     if (isPlayingRef.current) return;
@@ -86,7 +151,6 @@ export default function App() {
     }
   };
 
-  // Hanya mulai musik otomatis jika user memang mengaktifkan musik (isMusicOn === true)
   const handleFirstInteraction = () => {
     if (isMusicOn && !isPlayingRef.current) {
       startBackgroundMusic();
@@ -100,36 +164,97 @@ export default function App() {
     localStorage.setItem('montessori_stars', stars);
   }, [activeTab, activeGame, stars]);
 
-  const addStar = () => setStars(prev => prev + 1);
+  const addStar = () => setStars((prev) => prev + 1);
+
+  const currentBankGame = BANK_GAMES.find((g) => g.id === activeGame);
+  const CustomGameComponent = CUSTOM_GAMES[activeGame];
+
+  // Helper untuk membaca teks string biasa atau object { id, en }
+  const getText = (textObj) => {
+    if (!textObj) return '';
+    if (typeof textObj === 'string') return textObj;
+    return textObj[lang] || textObj.id || '';
+  };
+
+  // Cari kurikulum asal game yang sedang dimainkan
+  const activeCurriculumKey = useMemo(() => {
+    if (!activeGame) return null;
+    if (currentBankGame?.category && CURRICULUM_INFO[currentBankGame.category]) {
+      return currentBankGame.category;
+    }
+    for (const [catKey, list] of Object.entries(CURRICULUM_DATA)) {
+      if (list.some((g) => g.id === activeGame)) return catKey;
+    }
+    return null;
+  }, [activeGame, currentBankGame]);
+
+  const activeCurriculum = activeCurriculumKey ? CURRICULUM_INFO[activeCurriculumKey] : null;
+
+  // Filter game di Bank Games
+  const filteredBankGames = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return BANK_GAMES;
+    return BANK_GAMES.filter((game) => {
+      const title = getText(game.title).toLowerCase();
+      const desc = getText(game.desc).toLowerCase();
+      return title.includes(query) || desc.includes(query);
+    });
+  }, [searchQuery, lang]);
+
+// Jika mode kurikulum, ambil detail game lengkap dari BANK_GAMES berdasarkan ID
+  const displayedGames = useMemo(() => {
+    if (viewMode === 'curriculum') {
+      const gameIds = CURRICULUM_DATA[activeTab] || [];
+      return gameIds
+        .map((id) => BANK_GAMES.find((g) => g.id === id))
+        .filter(Boolean);
+    }
+    return filteredBankGames;
+  }, [viewMode, activeTab, filteredBankGames]);
 
   return (
-    <div 
+    <div
       onClick={handleFirstInteraction}
       className="w-full max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 min-h-screen"
     >
       <header className="flex items-center justify-between bg-white/95 backdrop-blur p-3 sm:p-5 rounded-2xl sm:rounded-3xl shadow-sm border border-stone-200 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-lg sm:text-2xl lg:text-3xl font-black text-stone-800">🌿 Montessori Playroom</h1>
-          <p className="text-[11px] sm:text-sm text-stone-500">Eksplorasi sensorik & logika mandiri</p>
+          <h1 className="text-lg sm:text-2xl lg:text-3xl font-black text-stone-800">{t.appTitle}</h1>
+          <p className="text-[11px] sm:text-sm text-stone-500">{t.appSubtitle}</p>
         </div>
-        
+
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Tombol Pengalih Bahasa */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleLanguage();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs sm:text-sm font-black shadow-sm transition active:scale-95"
+            title="Ganti Bahasa / Switch Language"
+          >
+            <span>{lang === 'id' ? '🇮🇩' : '🇬🇧'}</span>
+            <span>{lang.toUpperCase()}</span>
+          </button>
+
+          {/* Tombol Musik */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               toggleMusic();
             }}
-            title={isMusicOn ? 'Matikan Musik' : 'Nyalakan Musik'}
+            title={isMusicOn ? t.musicOff : t.musicOn}
             className={`flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border text-xs sm:text-sm font-bold transition ${
-              isMusicOn 
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
+              isMusicOn
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
                 : 'bg-stone-100 border-stone-300 text-stone-500'
             }`}
           >
             <span>{isMusicOn ? '🎵' : '🔇'}</span>
-            <span className="hidden sm:inline">{isMusicOn ? 'Musik ON' : 'Musik OFF'}</span>
+            <span className="hidden sm:inline">{isMusicOn ? t.musicOn : t.musicOff}</span>
           </button>
 
+          {/* Bintang Skor */}
           <div className="flex items-center gap-1.5 sm:gap-2 bg-amber-50 border border-amber-200 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl">
             <span>⭐</span>
             <span className="text-xs sm:text-base font-black text-amber-900">{stars}</span>
@@ -139,72 +264,128 @@ export default function App() {
 
       {!activeGame ? (
         <>
-          <div className="flex gap-2 p-1.5 bg-stone-200/80 rounded-2xl mb-4 sm:mb-8 overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('toddler')}
-              className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl ${
-                activeTab === 'toddler' ? 'bg-white shadow text-stone-800' : 'text-stone-600'
-              }`}
-            >
-              🌱 Toddler (1 - 2.5 th)
-            </button>
-            <button
-              onClick={() => setActiveTab('preschool')}
-              className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl ${
-                activeTab === 'preschool' ? 'bg-white shadow text-stone-800' : 'text-stone-600'
-              }`}
-            >
-              🌿 Preschool (3 - 4.5 th)
-            </button>
-            <button
-              onClick={() => setActiveTab('kinder')}
-              className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl ${
-                activeTab === 'kinder' ? 'bg-white shadow text-stone-800' : 'text-stone-600'
-              }`}
-            >
-              🌳 Kinder (5 - 7 th)
-            </button>
+          {/* Navigasi Tab Utama */}
+          <div className="flex justify-center mb-4">
+            <div className="bg-stone-200 p-1 rounded-2xl flex gap-1 shadow-inner">
+              <button
+                onClick={() => setViewMode('curriculum')}
+                className={`px-4 sm:px-6 py-2 text-xs sm:text-sm font-black rounded-xl transition ${
+                  viewMode === 'curriculum' ? 'bg-white shadow text-stone-900' : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                {t.tabCurriculum}
+              </button>
+              <button
+                onClick={() => setViewMode('bank')}
+                className={`px-4 sm:px-6 py-2 text-xs sm:text-sm font-black rounded-xl transition ${
+                  viewMode === 'bank' ? 'bg-amber-500 text-white shadow' : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                {t.tabBank} ({BANK_GAMES.length})
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
-            {activeTab === 'toddler' && (
-              <>
-                <GameCard title="Puzzle Bentuk Kayu" desc="Pasang balok bentuk ke lubangnya" icon="🪵" onPlay={() => setActiveGame('shape_puzzle')} />
-                <GameCard title="Bel Sensorik Lembut" desc="Sentuh bilah nada marimba kayu" icon="🔔" onPlay={() => setActiveGame('bells')} />
-                <GameCard title="Kanvas Lukis Jari" desc="Coretan warna ramah jari" icon="🎨" onPlay={() => setActiveGame('paint')} />
-              </>
-            )}
-            {activeTab === 'preschool' && (
-              <>
-                <GameCard title="Sortir Kancing Mangkuk" desc="Klasifikasi warna kancing" icon="🔴" onPlay={() => setActiveGame('color_sort')} />
-                <GameCard title="Susun Menara Pink" desc="Konsep ukuran balok besar ke kecil" icon="🧱" onPlay={() => setActiveGame('pink_tower')} />
-              </>
-            )}
-            {activeTab === 'kinder' && (
-              <>
-                <GameCard title="Apel Angka Hilang" desc="Lengkapi deret angka apel" icon="🍎" onPlay={() => setActiveGame('missing_apples')} />
-                <GameCard title="Anggota Tubuh" desc="Pasangkan nama anatomi tubuh" icon="🧍" onPlay={() => setActiveGame('body_parts')} />
-              </>
-            )}
-          </div>
+          {viewMode === 'curriculum' ? (
+            /* Tab Jenjang Usia Kurikulum */
+            <div className="flex gap-2 p-1.5 bg-stone-200/80 rounded-2xl mb-4 sm:mb-8 overflow-x-auto">
+              <button
+                onClick={() => setActiveTab('toddler')}
+                className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl ${
+                  activeTab === 'toddler' ? 'bg-white shadow text-stone-800' : 'text-stone-600'
+                }`}
+              >
+                {t.tabToddler}
+              </button>
+              <button
+                onClick={() => setActiveTab('preschool')}
+                className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl ${
+                  activeTab === 'preschool' ? 'bg-white shadow text-stone-800' : 'text-stone-600'
+                }`}
+              >
+                {t.tabPreschool}
+              </button>
+              <button
+                onClick={() => setActiveTab('kinder')}
+                className={`flex-1 min-w-[130px] py-2.5 sm:py-3 text-xs sm:text-sm font-bold rounded-xl ${
+                  activeTab === 'kinder' ? 'bg-white shadow text-stone-800' : 'text-stone-600'
+                }`}
+              >
+                {t.tabKinder}
+              </button>
+            </div>
+          ) : (
+            /* Bilah Pencarian Bank Game */
+            <div className="mb-6 max-w-md mx-auto relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 text-base">🔍</span>
+              <input
+                type="text"
+                placeholder={t.searchPlaceholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-11 pr-10 py-3 bg-white border border-stone-200 rounded-2xl shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 text-stone-800 placeholder-stone-400"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-sm font-bold bg-stone-100 w-6 h-6 rounded-full flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Grid Render Kartu Game */}
+          {displayedGames.length === 0 ? (
+            <div className="text-center py-12 bg-white/60 rounded-3xl border border-dashed border-stone-300 max-w-md mx-auto">
+              <span className="text-4xl">🔍</span>
+              <p className="text-stone-600 font-bold mt-2 text-sm">{t.notFound}</p>
+              <p className="text-stone-400 text-xs mt-1">{t.tryAnother}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
+              {displayedGames.map((game) => (
+                <GameCard
+                  key={game.id}
+                  title={getText(game.title)}
+                  desc={getText(game.desc)}
+                  icon={game.icon}
+                  playLabel={t.playBtn}
+                  onPlay={() => setActiveGame(game.id)}
+                />
+              ))}
+            </div>
+          )}
         </>
       ) : (
         <div>
-          <button
-            onClick={() => setActiveGame(null)}
-            className="mb-3 sm:mb-5 inline-flex items-center gap-1.5 px-3.5 py-2 bg-stone-200/90 text-stone-700 font-bold rounded-xl text-xs sm:text-sm hover:bg-stone-300"
-          >
-            ← Kembali ke Menu
-          </button>
+          {/* Header Kontrol di Dalam Game */}
+          <div className="flex items-center justify-between gap-2 mb-3 sm:mb-5">
+            <button
+              onClick={() => setActiveGame(null)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-stone-200/90 hover:bg-stone-300 text-stone-700 font-bold rounded-xl text-xs sm:text-sm shadow-sm transition active:scale-95"
+            >
+              {t.backBtn}
+            </button>
 
-          <Suspense fallback={<div className="p-8 text-center text-stone-500 font-bold">Memuat Game... ⏳</div>}>
-            {activeGame === 'shape_puzzle' && <ShapePuzzleGame onWin={addStar} />}
-            {activeGame === 'bells' && <SensoryBellsGame onWin={addStar} />}
-            {activeGame === 'paint' && <FingerPaintGame onWin={addStar} />}
-            {activeGame === 'color_sort' && <ColorSortingGame onWin={addStar} />}
-            {activeGame === 'pink_tower' && <PinkTowerGame onWin={addStar} />}
-            {activeGame === 'missing_apples' && <MissingApplesGame onWin={addStar} />}
-            {activeGame === 'body_parts' && <BodyPartsGame onWin={addStar} />}
+            {/* Label Kurikulum Sesuai Pilihan Bahasa */}
+            {activeCurriculum && (
+              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-black shadow-sm ${activeCurriculum.badgeClass}`}>
+                <span className={`w-2 h-2 rounded-full ${activeCurriculum.dotColor}`} />
+                <span>{getText(activeCurriculum.label)}</span>
+              </div>
+            )}
+          </div>
+
+          <Suspense fallback={<div className="p-8 text-center text-stone-500 font-bold">{t.loading}</div>}>
+            {CustomGameComponent ? (
+              <CustomGameComponent onWin={addStar} lang={lang} />
+            ) : currentBankGame && currentBankGame.engine === 'drag_drop' ? (
+              <UniversalDragDropEngine config={currentBankGame.config} onWin={addStar} lang={lang} />
+            ) : (
+              <div className="text-center py-12 text-stone-500 font-bold">{t.notAvailable}</div>
+            )}
           </Suspense>
         </div>
       )}
@@ -212,7 +393,7 @@ export default function App() {
   );
 }
 
-function GameCard({ title, desc, icon, onPlay }) {
+function GameCard({ title, desc, icon, playLabel, onPlay }) {
   return (
     <div
       onClick={onPlay}
@@ -225,7 +406,7 @@ function GameCard({ title, desc, icon, onPlay }) {
         <h3 className="font-bold text-stone-800 text-sm sm:text-base">{title}</h3>
         <p className="text-stone-500 text-[11px] sm:text-xs mt-0.5">{desc}</p>
         <span className="inline-block mt-2 text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-lg">
-          Mulai Main →
+          {playLabel}
         </span>
       </div>
     </div>
